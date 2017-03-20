@@ -11,55 +11,57 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func main() {
-	args := os.Args
-	var targetHash = regexp.MustCompile(args[1])
+type gitUser struct {
+	name  string
+	email string
+	date  string
+}
 
-	var obj []byte
-	if len(args) == 3 {
-		obj = []byte(args[2])
-	} else {
-		obj, _ = exec.Command("git", "cat-file", "-p", "HEAD").Output()
-	}
-	if !bytes.HasSuffix(obj, []byte("\n")) {
-		obj = append(obj, "\n"...)
-	}
+func parseUserLine(line string) gitUser {
+	author := gitUser{}
+	author_line := strings.Split(line, " ")
+	author.date = strings.Join(author_line[len(author_line)-2:], " ")
+	author.email = strings.Trim(author_line[len(author_line)-3 : len(author_line)-2][0], "<>")
+	author.name = strings.Join(author_line[1:len(author_line)-3], " ")
+	return author
+}
 
+func parseObj(obj []byte) (gitUser, gitUser) {
 	lines := strings.Split(string(obj), "\n")
-	var author_line []string
-	var committer_line []string
+	var author gitUser
+	var committer gitUser
 	for _, line := range lines {
 		if strings.HasPrefix(line, "author ") {
-			author_line = strings.Split(line, " ")
+			author = parseUserLine(line)
 		}
 		if strings.HasPrefix(line, "committer ") {
-			committer_line = strings.Split(line, " ")
-		}
-		if len(committer_line) > 0 && len(author_line) > 0 {
-			break
+			committer = parseUserLine(line)
 		}
 	}
-	author_date := strings.Join(author_line[len(author_line)-2:], " ")
-	author_email := strings.Trim(author_line[len(author_line)-3 : len(author_line)-2][0], "<>")
-	author_name := strings.Join(author_line[1:len(author_line)-3], " ")
+	return author, committer
+}
 
-	committer_date := strings.Join(committer_line[len(committer_line)-2:], " ")
-	committer_email := strings.Trim(committer_line[len(committer_line)-3 : len(committer_line)-2][0], "<>")
-	committer_name := strings.Join(committer_line[1:len(committer_line)-3], " ")
+func printRecreate(author gitUser, committer gitUser, extra string) {
+	fmt.Println("Recreate with:")
+	envString := strings.Join([]string{
+		"export",
+		fmt.Sprintf("GIT_AUTHOR_DATE='%s'", author.date),
+		fmt.Sprintf("GIT_AUTHOR_NAME='%s'", author.name),
+		fmt.Sprintf("GIT_AUTHOR_EMAIL='%s'", author.email),
+		fmt.Sprintf("GIT_COMMITTER_DATE='%s'", committer.date),
+		fmt.Sprintf("GIT_COMMITTER_NAME='%s'", committer.name),
+		fmt.Sprintf("GIT_COMMITTER_EMAIL='%s'", committer.email),
+	}, " ")
+	fmt.Printf("(%s; printf '%%s\\n%s' \"$(git show -s --format=%%B)\" | git commit --amend -F -)\n", envString, extra)
+}
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	seed := fmt.Sprintf("%x", r.Intn(99999))
-	val, ok := os.LookupEnv("GITHASHCRASH_SEED")
-	if ok {
-		seed = val
-	}
-
-	start := time.Now()
+func worker(targetHash *regexp.Regexp, obj []byte, seed string, result chan string, tested chan int) {
 	hashString := ""
 	extra := ""
 	i := 0
@@ -77,26 +79,72 @@ func main() {
 		hashString = hex.EncodeToString(h.Sum(nil))
 
 		if i%100000 == 0 {
-			log.Println(i)
+			select {
+			case tested <- 100000:
+			default:
+			}
 		}
 	}
-	elapsed := time.Since(start)
-
 	log.Println("Found:", hashString)
+	result <- extra
+}
+
+func main() {
+	args := os.Args
+	var targetHash = regexp.MustCompile(args[1])
+
+	var obj []byte
+	if len(args) == 3 {
+		obj = []byte(args[2])
+	} else {
+		obj, _ = exec.Command("git", "cat-file", "-p", "HEAD").Output()
+	}
+	if !bytes.HasSuffix(obj, []byte("\n")) {
+		obj = append(obj, "\n"...)
+	}
+	author, committer := parseObj(obj)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	seed := fmt.Sprintf("%x", r.Intn(99999))
+	val, ok := os.LookupEnv("GITHASHCRASH_SEED")
+	if ok {
+		seed = val
+	}
+
+	threads := runtime.NumCPU()
+	threads_val, threads_ok := os.LookupEnv("GITHASHCRASH_THREADS")
+	if threads_ok {
+		threads, _ = strconv.Atoi(threads_val)
+	}
+	log.Println("Threads:", threads)
+
+	start := time.Now()
+	tested := make(chan int, 100000)
+	sum := 0
+	go func() {
+		for {
+			sum += <-tested
+		}
+	}()
+	ticker := time.NewTicker(time.Second * 2)
+	go func() {
+		for range ticker.C {
+			log.Println("Tested", sum)
+			elapsed := time.Since(start)
+			log.Println("HPS:", float64(sum)/elapsed.Seconds())
+		}
+	}()
+
+	results := make(chan string)
+	for c := 0; c < threads; c++ {
+		go worker(targetHash, obj, fmt.Sprintf("%s-%d", seed, c), results, tested)
+	}
+	extra := <-results
+	ticker.Stop()
+	elapsed := time.Since(start)
 	log.Println("Time:", elapsed)
-	log.Println("Commits tested:", i)
-	log.Println("Tests per second:", float64(i)/elapsed.Seconds())
+	log.Println("Commits tested:", sum)
+	log.Println("Tests per second:", float64(sum)/elapsed.Seconds())
 
-	fmt.Println("Recreate with:")
-	envString := strings.Join([]string{
-		"export",
-		fmt.Sprintf("GIT_AUTHOR_DATE='%s'", author_date),
-		fmt.Sprintf("GIT_AUTHOR_NAME='%s'", author_name),
-		fmt.Sprintf("GIT_AUTHOR_EMAIL='%s'", author_email),
-		fmt.Sprintf("GIT_COMMITTER_DATE='%s'", committer_date),
-		fmt.Sprintf("GIT_COMMITTER_NAME='%s'", committer_name),
-		fmt.Sprintf("GIT_COMMITTER_EMAIL='%s'", committer_email),
-	}, " ")
-	fmt.Printf("(%s; printf '%%s\\n%s' \"$(git show -s --format=%%B)\" | git commit --amend -F -)\n", envString, extra)
-
+	printRecreate(author, committer, extra)
 }
