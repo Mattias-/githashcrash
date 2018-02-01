@@ -25,10 +25,10 @@ type gitUser struct {
 
 func parseUserLine(line string) gitUser {
 	author := gitUser{}
-	author_line := strings.Split(line, " ")
-	author.date = strings.Join(author_line[len(author_line)-2:], " ")
-	author.email = strings.Trim(author_line[len(author_line)-3 : len(author_line)-2][0], "<>")
-	author.name = strings.Join(author_line[1:len(author_line)-3], " ")
+	authorLine := strings.Split(line, " ")
+	author.date = strings.Join(authorLine[len(authorLine)-2:], " ")
+	author.email = strings.Trim(authorLine[len(authorLine)-3 : len(authorLine)-2][0], "<>")
+	author.name = strings.Join(authorLine[1:len(authorLine)-3], " ")
 	return author
 }
 
@@ -67,11 +67,11 @@ func worker(targetHash *regexp.Regexp, obj []byte, seed string, result chan stri
 	i := 0
 	for ; !targetHash.MatchString(hashString); i++ {
 		extra = fmt.Sprintf("%s-%d", seed, i)
-		new_obj_len := len(obj) + len(extra) + 1
+		newObjLen := len(obj) + len(extra) + 1
 
 		h := sha1.New()
 		io.WriteString(h, "commit ")
-		io.WriteString(h, strconv.Itoa(new_obj_len))
+		io.WriteString(h, strconv.Itoa(newObjLen))
 		io.WriteString(h, "\x00")
 		h.Write(obj)
 		io.WriteString(h, extra)
@@ -112,9 +112,9 @@ func main() {
 	}
 
 	threads := runtime.NumCPU()
-	threads_val, threads_ok := os.LookupEnv("GITHASHCRASH_THREADS")
-	if threads_ok {
-		threads, _ = strconv.Atoi(threads_val)
+	threadsVal, threadsOk := os.LookupEnv("GITHASHCRASH_THREADS")
+	if threadsOk {
+		threads, _ = strconv.Atoi(threadsVal)
 	}
 	log.Println("Threads:", threads)
 
