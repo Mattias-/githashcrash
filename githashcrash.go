@@ -2,96 +2,63 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha1"
-	"encoding/hex"
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
-	"strings"
+	"sync/atomic"
 	"time"
 )
 
-type gitUser struct {
-	name  string
-	email string
-	date  string
-}
+func run(hashRe string, obj []byte, seed string, threads int) string {
+	var testOps uint64
+	var targetHash = regexp.MustCompile(hashRe)
 
-func parseUserLine(line string) gitUser {
-	author := gitUser{}
-	authorLine := strings.Split(line, " ")
-	author.date = strings.Join(authorLine[len(authorLine)-2:], " ")
-	author.email = strings.Trim(authorLine[len(authorLine)-3 : len(authorLine)-2][0], "<>")
-	author.name = strings.Join(authorLine[1:len(authorLine)-3], " ")
-	return author
-}
+	start := time.Now()
+	ticker := time.NewTicker(time.Second * 2)
+	go func() {
+		for range ticker.C {
+			sum := atomic.LoadUint64(&testOps)
+			elapsed := time.Since(start)
+			log.Println("Time:", elapsed)
+			log.Println("Tested:", sum)
+			log.Println("HPS:", float64(sum)/elapsed.Seconds())
+		}
+	}()
 
-func parseObj(obj []byte) (gitUser, gitUser) {
-	lines := strings.Split(string(obj), "\n")
-	var author gitUser
-	var committer gitUser
-	for _, line := range lines {
-		if strings.HasPrefix(line, "author ") {
-			author = parseUserLine(line)
-		}
-		if strings.HasPrefix(line, "committer ") {
-			committer = parseUserLine(line)
-		}
+	results := make(chan string)
+	for c := 0; c < threads; c++ {
+		go worker(targetHash, obj, append([]byte(seed[:2]), byte(c)), results, &testOps)
 	}
-	return author, committer
+	extra := <-results
+	ticker.Stop()
+	return extra
 }
 
-func printRecreate(author gitUser, committer gitUser, extra string) {
-	fmt.Println("Recreate with:")
-	envString := strings.Join([]string{
-		"export",
-		fmt.Sprintf("GIT_AUTHOR_DATE='%s'", author.date),
-		fmt.Sprintf("GIT_AUTHOR_NAME='%s'", author.name),
-		fmt.Sprintf("GIT_AUTHOR_EMAIL='%s'", author.email),
-		fmt.Sprintf("GIT_COMMITTER_DATE='%s'", committer.date),
-		fmt.Sprintf("GIT_COMMITTER_NAME='%s'", committer.name),
-		fmt.Sprintf("GIT_COMMITTER_EMAIL='%s'", committer.email),
-	}, " ")
-	fmt.Printf("(%s; printf '%%s\\n%s' \"$(git show -s --format=%%B)\" | git commit --amend -F -)\n", envString, extra)
-}
-
-func worker(targetHash *regexp.Regexp, obj []byte, seed string, result chan string, tested chan int) {
-	hashString := ""
-	extra := ""
-	i := 0
-	for ; !targetHash.MatchString(hashString); i++ {
-		extra = fmt.Sprintf("%s-%d", seed, i)
-		newObjLen := len(obj) + len(extra) + 1
-
-		h := sha1.New()
-		io.WriteString(h, "commit ")
-		io.WriteString(h, strconv.Itoa(newObjLen))
-		io.WriteString(h, "\x00")
-		h.Write(obj)
-		io.WriteString(h, extra)
-		io.WriteString(h, "\n")
-		hashString = hex.EncodeToString(h.Sum(nil))
-
-		if i%100000 == 0 {
-			select {
-			case tested <- 100000:
-			default:
-			}
-		}
-	}
-	log.Println("Found:", hashString)
-	result <- extra
-}
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
 func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	args := os.Args
-	var targetHash = regexp.MustCompile(args[1])
+	hashRe := args[1]
 
 	var obj []byte
 	if len(args) == 3 {
@@ -102,7 +69,6 @@ func main() {
 	if !bytes.HasSuffix(obj, []byte("\n")) {
 		obj = append(obj, "\n"...)
 	}
-	author, committer := parseObj(obj)
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	seed := fmt.Sprintf("%x", r.Intn(99999))
@@ -118,33 +84,20 @@ func main() {
 	}
 	log.Println("Threads:", threads)
 
-	start := time.Now()
-	tested := make(chan int, 100000)
-	sum := 0
-	go func() {
-		for {
-			sum += <-tested
-		}
-	}()
-	ticker := time.NewTicker(time.Second * 2)
-	go func() {
-		for range ticker.C {
-			log.Println("Tested", sum)
-			elapsed := time.Since(start)
-			log.Println("HPS:", float64(sum)/elapsed.Seconds())
-		}
-	}()
-
-	results := make(chan string)
-	for c := 0; c < threads; c++ {
-		go worker(targetHash, obj, fmt.Sprintf("%s-%d", seed, c), results, tested)
-	}
-	extra := <-results
-	ticker.Stop()
-	elapsed := time.Since(start)
-	log.Println("Time:", elapsed)
-	log.Println("Commits tested:", sum)
-	log.Println("Tests per second:", float64(sum)/elapsed.Seconds())
-
+	extra := run(hashRe, obj, seed, threads)
+	log.Println("Found:", extra)
+	author, committer := parseObj(obj)
 	printRecreate(author, committer, extra)
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		runtime.GC() // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+		f.Close()
+	}
 }
