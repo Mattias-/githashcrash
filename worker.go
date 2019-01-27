@@ -9,20 +9,26 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"sync/atomic"
 )
 
-func worker(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan string, testOps *uint64) {
-	i := uint64(0)
-	buf := make([]byte, binary.MaxVarintLen64-3)
+type Worker struct {
+	i uint64
+}
 
-	rawCollisionBuffer := make([]byte, binary.MaxVarintLen64)
+func (w *Worker) worker(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan string) {
+	b64 := base64.RawStdEncoding
+	// 3
+	seedLen := len(seed)
+	rawCollisionLen := 9
+	// 12
+	collisionLen := b64.EncodedLen(rawCollisionLen)
+
+	rawCollisionBuffer := make([]byte, rawCollisionLen)
 	copy(rawCollisionBuffer, seed)
 
-	collisionLength := base64.RawStdEncoding.EncodedLen(len(seed) + len(buf))
-	collisionByteBuffer := make([]byte, collisionLength)
+	collisionByteBuffer := make([]byte, collisionLen)
 
-	newObjLen := len(obj) + collisionLength + 1
+	newObjLen := len(obj) + collisionLen + 1
 	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), obj...)
 	newObjectEnd := []byte("\n")
 
@@ -40,10 +46,9 @@ func worker(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan stri
 	// Hex encoded SHA1 is 40 bytes
 	encodedBuffer := make([]byte, 40)
 
-	for {
-		binary.PutUvarint(buf, i)
-		copy(rawCollisionBuffer[3:], buf)
-		base64.RawStdEncoding.Encode(collisionByteBuffer, rawCollisionBuffer)
+	for ; ; w.i++ {
+		binary.PutUvarint(rawCollisionBuffer[seedLen:], w.i)
+		b64.Encode(collisionByteBuffer, rawCollisionBuffer)
 
 		second := sha1.New()
 		unmarshaler, ok := second.(encoding.BinaryUnmarshaler)
@@ -59,13 +64,8 @@ func worker(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan stri
 		hex.Encode(encodedBuffer, second.Sum(nil))
 
 		if targetHash.Match(encodedBuffer) {
-			result <- base64.RawStdEncoding.EncodeToString(rawCollisionBuffer)
+			result <- b64.EncodeToString(rawCollisionBuffer)
 			return
 		}
-
-		if i%100000 == 0 {
-			atomic.AddUint64(testOps, 100000)
-		}
-		i++
 	}
 }

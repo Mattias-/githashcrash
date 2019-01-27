@@ -12,19 +12,24 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strconv"
-	"sync/atomic"
 	"time"
 )
 
 func run(hashRe string, obj []byte, seed string, threads int) string {
-	var testOps uint64
 	var targetHash = regexp.MustCompile(hashRe)
+	var workers []*Worker
+	for i := 0; i < threads; i++ {
+		workers = append(workers, &Worker{0})
+	}
 
 	start := time.Now()
 	ticker := time.NewTicker(time.Second * 2)
 	go func() {
 		for range ticker.C {
-			sum := atomic.LoadUint64(&testOps)
+			var sum uint64 = 0
+			for _, w := range workers {
+				sum += w.i
+			}
 			elapsed := time.Since(start)
 			log.Println("Time:", elapsed)
 			log.Println("Tested:", sum)
@@ -33,8 +38,8 @@ func run(hashRe string, obj []byte, seed string, threads int) string {
 	}()
 
 	results := make(chan string)
-	for c := 0; c < threads; c++ {
-		go worker(targetHash, obj, append([]byte(seed[:2]), byte(c)), results, &testOps)
+	for c, w := range workers {
+		go w.worker(targetHash, obj, append([]byte(seed[:2]), byte(c)), results)
 	}
 	extra := <-results
 	ticker.Stop()
