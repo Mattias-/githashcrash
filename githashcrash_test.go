@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"log"
 	"regexp"
 	"testing"
 )
@@ -14,7 +16,9 @@ committer Mattias Appelgren <mattias@ppelgren.se> 1548587085 +0100
 
 Better counting
 `)
-	run("^00000.*", obj, "11", 8)
+	res := run("^00000.*", obj, "11", 1)
+	log.Println(res.sha1)
+	log.Println(base64.StdEncoding.EncodeToString(res.object))
 }
 
 func BenchmarkWorker(b *testing.B) {
@@ -29,9 +33,9 @@ Better counting
 `)
 
 	for i := 0; i < b.N; i++ {
-		results := make(chan string)
+		results := make(chan Result)
 		w := &Worker{0}
-		go w.worker(targetHash, obj, []byte("000"), results)
+		go w.work(targetHash, obj, []byte("000"), results)
 		<-results
 	}
 }

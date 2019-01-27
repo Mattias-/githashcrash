@@ -26,7 +26,7 @@ func getStats(start time.Time, workers []*Worker) {
 	log.Println("HPS:", float64(sum)/elapsed.Seconds())
 }
 
-func run(hashRe string, obj []byte, seed string, threads int) string {
+func run(hashRe string, obj []byte, seed string, threads int) Result {
 	var targetHash = regexp.MustCompile(hashRe)
 	var workers []*Worker
 	for i := 0; i < threads; i++ {
@@ -41,9 +41,9 @@ func run(hashRe string, obj []byte, seed string, threads int) string {
 		}
 	}()
 
-	results := make(chan string)
+	results := make(chan Result)
 	for c, w := range workers {
-		go w.worker(targetHash, obj, append([]byte(seed[:2]), byte(c)), results)
+		go w.work(targetHash, obj, append([]byte(seed[:2]), byte(c)), results)
 	}
 	extra := <-results
 	getStats(start, workers)
@@ -76,6 +76,7 @@ func main() {
 	} else {
 		obj, _ = exec.Command("git", "cat-file", "-p", "HEAD").Output()
 	}
+	// A trailing newline might be lost if object is passed as argument.
 	if !bytes.HasSuffix(obj, []byte("\n")) {
 		obj = append(obj, "\n"...)
 	}
@@ -94,10 +95,9 @@ func main() {
 	}
 	log.Println("Threads:", threads)
 
-	extra := run(hashRe, obj, seed, threads)
-	log.Println("Found:", extra)
-	author, committer := parseObj(obj)
-	printRecreate(author, committer, extra)
+	result := run(hashRe, obj, seed, threads)
+	log.Println("Found:", result)
+	printRecreate(result)
 
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)

@@ -15,7 +15,13 @@ type Worker struct {
 	i uint64
 }
 
-func (w *Worker) worker(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan string) {
+type Result struct {
+	magic  string
+	sha1   string
+	object []byte
+}
+
+func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan Result) {
 	b64 := base64.RawStdEncoding
 	// 3
 	seedLen := len(seed)
@@ -65,7 +71,12 @@ func (w *Worker) worker(targetHash *regexp.Regexp, obj []byte, seed []byte, resu
 		hex.Encode(encodedBuffer, hsum)
 
 		if targetHash.Match(encodedBuffer) {
-			result <- b64.EncodeToString(rawCollisionBuffer)
+			newObject := append(newObjectStart, collisionByteBuffer...)
+			newObject = append(newObject, newObjectEnd...)
+			result <- Result{
+				b64.EncodeToString(rawCollisionBuffer),
+				hex.EncodeToString(hsum),
+				newObject}
 			return
 		}
 	}
