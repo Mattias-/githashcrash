@@ -61,7 +61,8 @@ func (w *Worker) worker(targetHash *regexp.Regexp, obj []byte, seed []byte, resu
 		second.Write(collisionByteBuffer)
 		second.Write(newObjectEnd)
 
-		hex.Encode(encodedBuffer, second.Sum(nil))
+		hsum := second.Sum(nil)
+		hex.Encode(encodedBuffer, hsum)
 
 		if targetHash.Match(encodedBuffer) {
 			result <- b64.EncodeToString(rawCollisionBuffer)

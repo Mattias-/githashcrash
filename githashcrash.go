@@ -15,6 +15,17 @@ import (
 	"time"
 )
 
+func getStats(start time.Time, workers []*Worker) {
+	var sum uint64 = 0
+	for _, w := range workers {
+		sum += w.i
+	}
+	elapsed := time.Since(start)
+	log.Println("Time:", elapsed)
+	log.Println("Tested:", sum)
+	log.Println("HPS:", float64(sum)/elapsed.Seconds())
+}
+
 func run(hashRe string, obj []byte, seed string, threads int) string {
 	var targetHash = regexp.MustCompile(hashRe)
 	var workers []*Worker
@@ -26,14 +37,7 @@ func run(hashRe string, obj []byte, seed string, threads int) string {
 	ticker := time.NewTicker(time.Second * 2)
 	go func() {
 		for range ticker.C {
-			var sum uint64 = 0
-			for _, w := range workers {
-				sum += w.i
-			}
-			elapsed := time.Since(start)
-			log.Println("Time:", elapsed)
-			log.Println("Tested:", sum)
-			log.Println("HPS:", float64(sum)/elapsed.Seconds())
+			getStats(start, workers)
 		}
 	}()
 
@@ -42,6 +46,7 @@ func run(hashRe string, obj []byte, seed string, threads int) string {
 		go w.worker(targetHash, obj, append([]byte(seed[:2]), byte(c)), results)
 	}
 	extra := <-results
+	getStats(start, workers)
 	ticker.Stop()
 	return extra
 }
