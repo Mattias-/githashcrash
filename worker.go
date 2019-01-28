@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding"
 	"encoding/base64"
@@ -34,9 +35,18 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, result
 
 	collisionByteBuffer := make([]byte, collisionLen)
 
-	newObjLen := len(obj) + collisionLen + 1
-	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), obj...)
-	newObjectEnd := []byte("\n")
+	z := bytes.SplitN(obj, []byte("REPLACEME"), 2)
+	var before []byte
+	before = z[0]
+	var after []byte
+	if len(z) == 2 {
+		after = z[1]
+	} else {
+		after = []byte("\n")
+	}
+	newObjLen := len(before) + collisionLen + len(after)
+	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), before...)
+	newObjectEnd := after
 
 	first := sha1.New()
 	first.Write(newObjectStart)

@@ -59,4 +59,16 @@ bash -c "$recreate_cmd" &>/dev/null
 hash_5=$(git rev-parse HEAD)
 [[ $hash_5 =~ $pattern ]] || exit 1
 
+# Replacement
+repl_1="REPLACEME"
+cp -r "$repo" "$testsdir/repo6" && cd "$_"
+git commit --allow-empty -m "Test commit" -m "Message message" -m "hello world $repl_1 hello world" -m "More message"
+git show | grep "$repl_1"
+recreate_cmd=$($githashcrash "$pattern" | tail -1)
+bash -c "$recreate_cmd" &>/dev/null
+hash_6=$(git rev-parse HEAD)
+[[ $hash_6 =~ $pattern ]] || exit 1
+! git show | grep "$repl_1"
+
+
 echo "Tests passed!"

@@ -96,7 +96,7 @@ func main() {
 	log.Println("Threads:", threads)
 
 	result := run(hashRe, obj, seed, threads)
-	log.Println("Found:", result)
+	log.Println("Found:", result.sha1)
 	printRecreate(result)
 
 	if *memprofile != "" {
