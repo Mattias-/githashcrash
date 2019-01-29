@@ -15,7 +15,8 @@ committer Mattias Appelgren <mattias@ppelgren.se> 1548587085 +0100
 
 Better counting
 `)
-	res := run("^00000.*", obj, "11", 1)
+	placeholder := []byte("REPLACEME")
+	res := run("^00000.*", obj, "11", 1, placeholder)
 	if !strings.HasPrefix(res.sha1, "00000") {
 		t.Fail()
 	}
@@ -34,14 +35,15 @@ Better counting
 
 Hello world: REPLACEME abc
 `)
-	res := run("^00000.*", obj, "11", 1)
+	placeholder := []byte("REPLACEME")
+	res := run("^00000.*", obj, "11", 1, placeholder)
 	if !strings.HasPrefix(res.sha1, "00000") {
 		t.Fail()
 	}
 	if bytes.Equal(obj, res.object) {
 		t.Fail()
 	}
-	if bytes.Contains(res.object, []byte("REPLACEME")) {
+	if bytes.Contains(res.object, placeholder) {
 		t.Fail()
 	}
 }
@@ -55,12 +57,15 @@ author Mattias Appelgren <mattias@ppelgren.se> 1548587085 +0100
 committer Mattias Appelgren <mattias@ppelgren.se> 1548587085 +0100
 
 Better counting
-`)
 
+Hello world: REPLACEME abc
+The end
+`)
+	placeholder := []byte("REPLACEME")
 	for i := 0; i < b.N; i++ {
 		results := make(chan Result)
 		w := &Worker{0}
-		go w.work(targetHash, obj, []byte("000"), results)
+		go w.work(targetHash, obj, []byte("000"), placeholder, results)
 		<-results
 	}
 }

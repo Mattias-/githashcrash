@@ -22,7 +22,7 @@ type Result struct {
 	object []byte
 }
 
-func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, result chan Result) {
+func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeholder []byte, result chan Result) {
 	b64 := base64.RawStdEncoding
 	// 3
 	seedLen := len(seed)
@@ -35,7 +35,7 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, result
 
 	collisionByteBuffer := make([]byte, collisionLen)
 
-	z := bytes.SplitN(obj, []byte("REPLACEME"), 2)
+	z := bytes.SplitN(obj, placeholder, 2)
 	var before []byte
 	before = z[0]
 	var after []byte

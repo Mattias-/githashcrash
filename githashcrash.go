@@ -26,7 +26,7 @@ func getStats(start time.Time, workers []*Worker) {
 	log.Println("HPS:", float64(sum)/elapsed.Seconds())
 }
 
-func run(hashRe string, obj []byte, seed string, threads int) Result {
+func run(hashRe string, obj []byte, seed string, threads int, placeholder []byte) Result {
 	var targetHash = regexp.MustCompile(hashRe)
 	var workers []*Worker
 	for i := 0; i < threads; i++ {
@@ -43,7 +43,7 @@ func run(hashRe string, obj []byte, seed string, threads int) Result {
 
 	results := make(chan Result)
 	for c, w := range workers {
-		go w.work(targetHash, obj, append([]byte(seed[:2]), byte(c)), results)
+		go w.work(targetHash, obj, append([]byte(seed[:2]), byte(c)), placeholder, results)
 	}
 	extra := <-results
 	getStats(start, workers)
@@ -95,7 +95,13 @@ func main() {
 	}
 	log.Println("Threads:", threads)
 
-	result := run(hashRe, obj, seed, threads)
+	placeholder := []byte("REPLACEME")
+	placeholderVal, placeholderOk := os.LookupEnv("GITHASHCRASH_PLACEHOLDER")
+	if placeholderOk {
+		placeholder = []byte(placeholderVal)
+	}
+
+	result := run(hashRe, obj, seed, threads, placeholder)
 	log.Println("Found:", result.sha1)
 	printRecreate(result)
 
