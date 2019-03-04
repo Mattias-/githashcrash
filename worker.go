@@ -22,7 +22,12 @@ type Result struct {
 	object []byte
 }
 
+func getMatchFunc(targetHash *regexp.Regexp) func([]byte) bool {
+	return targetHash.Match
+}
+
 func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeholder []byte, result chan Result) {
+	matcher := getMatchFunc(targetHash)
 	b64 := base64.RawStdEncoding
 	// 3
 	seedLen := len(seed)
@@ -80,7 +85,7 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 		hsum := second.Sum(nil)
 		hex.Encode(encodedBuffer, hsum)
 
-		if targetHash.Match(encodedBuffer) {
+		if matcher(encodedBuffer) {
 			newObject := append(newObjectStart, collisionByteBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- Result{
