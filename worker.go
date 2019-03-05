@@ -4,59 +4,17 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"githashcrash/filler/base"
+	"githashcrash/matcher/regexp"
 	"log"
 	"regexp"
 )
 
-type Worker struct {
-	i uint64
-}
-
-type Result struct {
-	magic  string
-	sha1   string
-	object []byte
-}
-
-func getMatchFunc(targetHash *regexp.Regexp) func([]byte) bool {
-	return targetHash.Match
-}
-
-func getFiller(seed []byte) (*[]byte, *[]byte, func(uint64)) {
-	b64 := base64.RawStdEncoding
-	// seedLen = 3 (as specified in advance)
-	seedLen := len(seed)
-	rawCollisionLen := 9
-	// collisionLen = 12
-	collisionLen := b64.EncodedLen(rawCollisionLen)
-
-	inputBuffer := make([]byte, rawCollisionLen)
-	outputBuffer := make([]byte, collisionLen)
-
-	// inputBuffer always start with seed
-	copy(inputBuffer, seed)
-
-	// The filler function adds count and compacts and updates outputBuffer
-	return &inputBuffer, &outputBuffer, func(count uint64) {
-		// The last part of the input buffer contains the count
-		binary.PutUvarint(inputBuffer[seedLen:], count)
-		// base64 encoding reduce byte size
-		// from i to o
-		b64.Encode(outputBuffer, inputBuffer)
-	}
-}
-
 func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeholder []byte, result chan Result) {
-	matcher := getMatchFunc(targetHash)
-	b64 := base64.RawStdEncoding
-
-	// Get filler function, it copies inputBuffer to outputBuffer after doing some modifications, like adding current count
-	// Length is preserved
-	inputBuffer, outputBuffer, filler := getFiller(seed)
+	matcher := regexpmatcher.New(targetHash.String())
+	outputBuffer, filler := basefiller.New(seed)
 
 	// Split on placeholder
 	z := bytes.SplitN(obj, placeholder, 2)
@@ -88,7 +46,7 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 	encodedBuffer := make([]byte, 40)
 
 	for ; ; w.i++ {
-		filler(w.i)
+		filler.Fill(w.i)
 
 		second := sha1.New()
 		unmarshaler, ok := second.(encoding.BinaryUnmarshaler)
@@ -104,11 +62,10 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 		hsum := second.Sum(nil)
 		hex.Encode(encodedBuffer, hsum)
 
-		if matcher(encodedBuffer) {
+		if matcher.Match(encodedBuffer) {
 			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- Result{
-				b64.EncodeToString(*inputBuffer),
 				hex.EncodeToString(hsum),
 				newObject}
 			return

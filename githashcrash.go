@@ -15,8 +15,22 @@ import (
 	"time"
 )
 
+// Matcher has a match function that returns true if
+type Matcher interface {
+	Match([]byte) bool
+}
+
+type Worker struct {
+	i uint64
+}
+
+type Result struct {
+	sha1   string
+	object []byte
+}
+
 func getStats(start time.Time, workers []*Worker) {
-	var sum uint64 = 0
+	var sum uint64
 	for _, w := range workers {
 		sum += w.i
 	}
