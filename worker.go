@@ -26,20 +26,39 @@ func getMatchFunc(targetHash *regexp.Regexp) func([]byte) bool {
 	return targetHash.Match
 }
 
+func getFiller(seed []byte) (*[]byte, *[]byte, func(uint64)) {
+	b64 := base64.RawStdEncoding
+	// seedLen = 3 (as specified in advance)
+	seedLen := len(seed)
+	rawCollisionLen := 9
+	// collisionLen = 12
+	collisionLen := b64.EncodedLen(rawCollisionLen)
+
+	inputBuffer := make([]byte, rawCollisionLen)
+	outputBuffer := make([]byte, collisionLen)
+
+	// inputBuffer always start with seed
+	copy(inputBuffer, seed)
+
+	// The filler function adds count and compacts and updates outputBuffer
+	return &inputBuffer, &outputBuffer, func(count uint64) {
+		// The last part of the input buffer contains the count
+		binary.PutUvarint(inputBuffer[seedLen:], count)
+		// base64 encoding reduce byte size
+		// from i to o
+		b64.Encode(outputBuffer, inputBuffer)
+	}
+}
+
 func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeholder []byte, result chan Result) {
 	matcher := getMatchFunc(targetHash)
 	b64 := base64.RawStdEncoding
-	// 3
-	seedLen := len(seed)
-	rawCollisionLen := 9
-	// 12
-	collisionLen := b64.EncodedLen(rawCollisionLen)
 
-	rawCollisionBuffer := make([]byte, rawCollisionLen)
-	copy(rawCollisionBuffer, seed)
+	// Get filler function, it copies inputBuffer to outputBuffer after doing some modifications, like adding current count
+	// Length is preserved
+	inputBuffer, outputBuffer, filler := getFiller(seed)
 
-	collisionByteBuffer := make([]byte, collisionLen)
-
+	// Split on placeholder
 	z := bytes.SplitN(obj, placeholder, 2)
 	var before []byte
 	before = z[0]
@@ -49,7 +68,8 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 	} else {
 		after = []byte("\n")
 	}
-	newObjLen := len(before) + collisionLen + len(after)
+
+	newObjLen := len(before) + len(*outputBuffer) + len(after)
 	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), before...)
 	newObjectEnd := after
 
@@ -68,8 +88,7 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 	encodedBuffer := make([]byte, 40)
 
 	for ; ; w.i++ {
-		binary.PutUvarint(rawCollisionBuffer[seedLen:], w.i)
-		b64.Encode(collisionByteBuffer, rawCollisionBuffer)
+		filler(w.i)
 
 		second := sha1.New()
 		unmarshaler, ok := second.(encoding.BinaryUnmarshaler)
@@ -79,17 +98,17 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 		if err := unmarshaler.UnmarshalBinary(state); err != nil {
 			log.Fatal("unable to unmarshal hash:", err)
 		}
-		second.Write(collisionByteBuffer)
+		second.Write(*outputBuffer)
 		second.Write(newObjectEnd)
 
 		hsum := second.Sum(nil)
 		hex.Encode(encodedBuffer, hsum)
 
 		if matcher(encodedBuffer) {
-			newObject := append(newObjectStart, collisionByteBuffer...)
+			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- Result{
-				b64.EncodeToString(rawCollisionBuffer),
+				b64.EncodeToString(*inputBuffer),
 				hex.EncodeToString(hsum),
 				newObject}
 			return
