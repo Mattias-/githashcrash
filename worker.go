@@ -7,25 +7,29 @@ import (
 	"encoding/hex"
 	"fmt"
 	"githashcrash/filler/base"
-	"githashcrash/matcher/regexp"
 	"log"
-	"regexp"
 )
 
-func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeholder []byte, result chan Result) {
-	matcher := regexpmatcher.New(targetHash.String())
-	outputBuffer, filler := basefiller.New(seed)
-
+func split2(h, needle []byte) ([]byte, []byte) {
 	// Split on placeholder
-	z := bytes.SplitN(obj, placeholder, 2)
+	z := bytes.SplitN(h, needle, 2)
 	var before []byte
 	before = z[0]
 	var after []byte
 	if len(z) == 2 {
 		after = z[1]
 	} else {
+		// If no placeholder is found place it last.
 		after = []byte("\n")
 	}
+	return before, after
+}
+
+func (w *Worker) work(matcher Matcher, obj []byte, seed []byte, placeholder []byte, result chan Result) {
+	outputBuffer, filler := basefiller.New(seed)
+
+	// Split on placeholder
+	before, after := split2(obj, placeholder)
 
 	newObjLen := len(before) + len(*outputBuffer) + len(after)
 	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), before...)
@@ -42,9 +46,6 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 		log.Fatal("unable to marshal hash:", err)
 	}
 
-	// Hex encoded SHA1 is 40 bytes
-	encodedBuffer := make([]byte, 40)
-
 	for ; ; w.i++ {
 		filler.Fill(w.i)
 
@@ -58,11 +59,9 @@ func (w *Worker) work(targetHash *regexp.Regexp, obj []byte, seed []byte, placeh
 		}
 		second.Write(*outputBuffer)
 		second.Write(newObjectEnd)
-
 		hsum := second.Sum(nil)
-		hex.Encode(encodedBuffer, hsum)
 
-		if matcher.Match(encodedBuffer) {
+		if matcher.Match(hsum) {
 			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- Result{
