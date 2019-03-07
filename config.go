@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os/exec"
 	"runtime"
@@ -29,9 +30,11 @@ func parseFlags(c *config) {
 	flag.Parse()
 	args := flag.Args()
 	c.fillerInput = args[0]
-	obj, _ := exec.Command("git", "cat-file", "-p", "HEAD").Output()
+	obj, err := exec.Command("git", "cat-file", "-p", "HEAD").Output()
+	if err != nil {
+		log.Fatal("Could not run git command:", err)
+	}
 	c.object = obj
-
 	c.seed = []byte(fmt.Sprintf("%x", seed))
 	c.placeholder = []byte(*placeholder)
 }
