@@ -1,7 +1,8 @@
 package main
 
 import (
-	regexpmatcher "githashcrash/matcher/regexp"
+	//regexpmatcher "githashcrash/matcher/regexp"
+	startswithmatcher "githashcrash/matcher/startswith"
 	"log"
 	"os"
 	"os/signal"
@@ -36,7 +37,8 @@ func getStats(start time.Time, workers []*Worker) {
 }
 
 func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte) Result {
-	matcher := regexpmatcher.New(hashRe)
+	matcher := startswithmatcher.New(hashRe)
+	log.Println("Workers:", threads)
 	var workers []*Worker
 	for i := 0; i < threads; i++ {
 		workers = append(workers, &Worker{0})
