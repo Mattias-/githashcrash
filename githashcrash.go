@@ -4,7 +4,9 @@ import (
 	regexpmatcher "githashcrash/matcher/regexp"
 	"log"
 	"os"
+	"os/signal"
 	"runtime/pprof"
+	"syscall"
 	"time"
 )
 
@@ -74,6 +76,16 @@ func main() {
 		}
 		defer pprof.StopCPUProfile()
 	}
+
+	// listening OS shutdown singal
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-signalChan
+		log.Printf("Got shutdown signal.")
+		pprof.StopCPUProfile()
+		os.Exit(1)
+	}()
 
 	result := run(c.fillerInput, c.object, c.seed, c.threads, c.placeholder)
 	log.Println("Found:", result.sha1)
