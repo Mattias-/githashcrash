@@ -14,7 +14,7 @@ type base struct {
 	outputBuffer []byte
 }
 
-func New(seed []byte) (*[]byte, *base) {
+func New(seed []byte) *base {
 	b64 := base64.RawStdEncoding
 	// seedLen = 3 (as specified in advance)
 	seedLen := len(seed)
@@ -27,13 +27,17 @@ func New(seed []byte) (*[]byte, *base) {
 
 	// inputBuffer always start with seed
 	copy(inputBuffer, seed)
-	return &outputBuffer, &base{
+	return &base{
 		seed,
 		seedLen,
 		*b64,
 		inputBuffer,
 		outputBuffer,
 	}
+}
+
+func (b base) OutputBuffer() *[]byte {
+	return &b.outputBuffer
 }
 
 func (b base) Fill(count uint64) {

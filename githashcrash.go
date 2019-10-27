@@ -1,8 +1,8 @@
 package main
 
 import (
-	//regexpmatcher "githashcrash/matcher/regexp"
-	startswithmatcher "githashcrash/matcher/startswith"
+	filler "githashcrash/filler/base"
+	matcher "githashcrash/matcher/startswith"
 	"log"
 	"os"
 	"os/signal"
@@ -16,8 +16,14 @@ type Matcher interface {
 	Match([]byte) bool
 }
 
-type Worker struct {
-	i uint64
+type Filler interface {
+	Fill(uint64)
+	OutputBuffer() *[]byte
+}
+
+type Worker interface {
+	Count() uint64
+	Work(Matcher, Filler, []byte, []byte, chan Result)
 }
 
 type Result struct {
@@ -25,10 +31,10 @@ type Result struct {
 	object []byte
 }
 
-func getStats(start time.Time, workers []*Worker) {
+func getStats(start time.Time, workers []Worker) {
 	var sum uint64
 	for _, w := range workers {
-		sum += w.i
+		sum += w.Count()
 	}
 	elapsed := time.Since(start)
 	log.Println("Time:", elapsed)
@@ -37,16 +43,17 @@ func getStats(start time.Time, workers []*Worker) {
 }
 
 func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte) Result {
-	matcher := startswithmatcher.New(hashRe)
+	matcher := matcher.New(hashRe)
 	log.Println("Workers:", threads)
-	var workers []*Worker
+	var workers []Worker
 	for i := 0; i < threads; i++ {
-		workers = append(workers, &Worker{0})
+		workers = append(workers, NewW())
 	}
 
 	results := make(chan Result)
 	for c, w := range workers {
-		go w.work(matcher, obj, append(seed[:2], byte(c)), placeholder, results)
+		filler := filler.New(append(seed[:2], byte(c)))
+		go w.Work(matcher, filler, obj, placeholder, results)
 	}
 
 	// Log stats during execution

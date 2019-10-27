@@ -6,7 +6,6 @@ import (
 	"encoding"
 	"encoding/hex"
 	"fmt"
-	"githashcrash/filler/base"
 	"log"
 )
 
@@ -25,8 +24,20 @@ func split2(h, needle []byte) ([]byte, []byte) {
 	return before, after
 }
 
-func (w *Worker) work(matcher Matcher, obj []byte, seed []byte, placeholder []byte, result chan Result) {
-	outputBuffer, filler := basefiller.New(seed)
+type worker2 struct {
+	i uint64
+}
+
+func (w *worker2) Count() uint64 {
+	return w.i
+}
+
+func NewW() Worker {
+	return &worker2{0}
+}
+
+func (w *worker2) Work(matcher Matcher, filler Filler, obj []byte, placeholder []byte, result chan Result) {
+	outputBuffer := filler.OutputBuffer()
 
 	// Split on placeholder
 	before, after := split2(obj, placeholder)
