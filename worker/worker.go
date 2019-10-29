@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"bytes"
@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+
+	"githashcrash/filler"
+	"githashcrash/matcher"
 )
 
 func split2(h, needle []byte) ([]byte, []byte) {
@@ -24,6 +27,16 @@ func split2(h, needle []byte) ([]byte, []byte) {
 	return before, after
 }
 
+type Worker interface {
+	Count() uint64
+	Work(matcher.Matcher, filler.Filler, []byte, []byte, chan Result)
+}
+
+type Result struct {
+	Sha1   string
+	Object []byte
+}
+
 type worker2 struct {
 	i uint64
 }
@@ -36,8 +49,8 @@ func NewW() Worker {
 	return &worker2{0}
 }
 
-func (w *worker2) Work(matcher Matcher, filler Filler, obj []byte, placeholder []byte, result chan Result) {
-	outputBuffer := filler.OutputBuffer()
+func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placeholder []byte, result chan Result) {
+	outputBuffer := f.OutputBuffer()
 
 	// Split on placeholder
 	before, after := split2(obj, placeholder)
@@ -58,7 +71,7 @@ func (w *worker2) Work(matcher Matcher, filler Filler, obj []byte, placeholder [
 	}
 
 	for ; ; w.i++ {
-		filler.Fill(w.i)
+		f.Fill(w.i)
 
 		second := sha1.New()
 		unmarshaler, ok := second.(encoding.BinaryUnmarshaler)
@@ -72,7 +85,7 @@ func (w *worker2) Work(matcher Matcher, filler Filler, obj []byte, placeholder [
 		second.Write(newObjectEnd)
 		hsum := second.Sum(nil)
 
-		if matcher.Match(hsum) {
+		if m.Match(hsum) {
 			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- Result{

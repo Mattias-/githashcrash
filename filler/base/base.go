@@ -1,4 +1,4 @@
-package basefiller
+package base
 
 import (
 	"encoding/base64"

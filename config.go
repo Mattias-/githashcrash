@@ -23,7 +23,7 @@ func parseFlags(c *config) {
 	flag.StringVar(&c.cpuprofile, "cpuprofile", "", "write cpu profile to `file`")
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	seed := flag.Int("seed", r.Intn(99999), "write memory profile to `file`")
+	seed := flag.Int("seed", r.Intn(99999), "Seed bytes, default is actually random.")
 	placeholder := flag.String("placeholder", "REPLACEME", "placeholder to mutate")
 	flag.IntVar(&c.threads, "threads", runtime.NumCPU(), "threads")
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	filler "githashcrash/filler/base"
 	"githashcrash/matcher/regexp"
 	"strings"
 	"testing"
@@ -64,8 +65,9 @@ The end
 	placeholder := []byte("REPLACEME")
 	for i := 0; i < b.N; i++ {
 		results := make(chan Result)
-		w := &Worker{0}
-		go w.work(matcher, obj, []byte("000"), placeholder, results)
+		w := NewW()
+		filler := filler.New([]byte("000"))
+		go w.Work(matcher, filler, obj, placeholder, results)
 		<-results
 	}
 }

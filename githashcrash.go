@@ -1,37 +1,19 @@
 package main
 
 import (
-	filler "githashcrash/filler/base"
-	matcher "githashcrash/matcher/startswith"
 	"log"
 	"os"
 	"os/signal"
 	"runtime/pprof"
 	"syscall"
 	"time"
+
+	filler "githashcrash/filler/base"
+	matcher "githashcrash/matcher/startswith"
+	"githashcrash/worker"
 )
 
-// Matcher has a match function that returns true if
-type Matcher interface {
-	Match([]byte) bool
-}
-
-type Filler interface {
-	Fill(uint64)
-	OutputBuffer() *[]byte
-}
-
-type Worker interface {
-	Count() uint64
-	Work(Matcher, Filler, []byte, []byte, chan Result)
-}
-
-type Result struct {
-	sha1   string
-	object []byte
-}
-
-func getStats(start time.Time, workers []Worker) {
+func getStats(start time.Time, workers []worker.Worker) {
 	var sum uint64
 	for _, w := range workers {
 		sum += w.Count()
@@ -42,17 +24,15 @@ func getStats(start time.Time, workers []Worker) {
 	log.Println("HPS:", float64(sum)/elapsed.Seconds())
 }
 
-func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte) Result {
+func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte) worker.Result {
 	matcher := matcher.New(hashRe)
 	log.Println("Workers:", threads)
-	var workers []Worker
+	results := make(chan worker.Result)
+	var workers []worker.Worker
 	for i := 0; i < threads; i++ {
-		workers = append(workers, NewW())
-	}
-
-	results := make(chan Result)
-	for c, w := range workers {
-		filler := filler.New(append(seed[:2], byte(c)))
+		w := worker.NewW()
+		workers = append(workers, w)
+		filler := filler.New(append(seed[:2], byte(i)))
 		go w.Work(matcher, filler, obj, placeholder, results)
 	}
 
@@ -65,11 +45,9 @@ func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte
 			getStats(start, workers)
 		}
 	}()
+	defer getStats(start, workers)
 
-	// Hang here until a result is sent
-	extra := <-results
-	getStats(start, workers)
-	return extra
+	return <-results
 }
 
 func main() {
@@ -97,6 +75,6 @@ func main() {
 	}()
 
 	result := run(c.fillerInput, c.object, c.seed, c.threads, c.placeholder)
-	log.Println("Found:", result.sha1)
+	log.Println("Found:", result.Sha1)
 	printRecreate(result)
 }
