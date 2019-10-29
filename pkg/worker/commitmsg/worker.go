@@ -1,4 +1,4 @@
-package worker
+package commitmsg
 
 import (
 	"bytes"
@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"log"
 
-	"githashcrash/filler"
-	"githashcrash/matcher"
+	"github.com/Mattias-/githashcrash/pkg/filler"
+	"github.com/Mattias-/githashcrash/pkg/matcher"
+	"github.com/Mattias-/githashcrash/pkg/worker"
 )
 
 func split2(h, needle []byte) ([]byte, []byte) {
@@ -27,16 +28,6 @@ func split2(h, needle []byte) ([]byte, []byte) {
 	return before, after
 }
 
-type Worker interface {
-	Count() uint64
-	Work(matcher.Matcher, filler.Filler, []byte, []byte, chan Result)
-}
-
-type Result struct {
-	Sha1   string
-	Object []byte
-}
-
 type worker2 struct {
 	i uint64
 }
@@ -45,11 +36,11 @@ func (w *worker2) Count() uint64 {
 	return w.i
 }
 
-func NewW() Worker {
+func NewW() worker.Worker {
 	return &worker2{0}
 }
 
-func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placeholder []byte, result chan Result) {
+func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placeholder []byte, result chan worker.Result) {
 	outputBuffer := f.OutputBuffer()
 
 	// Split on placeholder
@@ -88,7 +79,7 @@ func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placehold
 		if m.Match(hsum) {
 			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
-			result <- Result{
+			result <- worker.Result{
 				hex.EncodeToString(hsum),
 				newObject}
 			return

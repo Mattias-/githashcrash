@@ -1,15 +1,16 @@
-package main
+package commitmsg
 
 import (
 	"bytes"
 	"compress/zlib"
 	"encoding/base64"
 	"fmt"
-	"githashcrash/worker"
 	"log"
+
+	"github.com/Mattias-/githashcrash/pkg/worker"
 )
 
-func printRecreate(result worker.Result) {
+func PrintRecreate(result worker.Result) {
 	log.Println("Create with:")
 
 	var b bytes.Buffer

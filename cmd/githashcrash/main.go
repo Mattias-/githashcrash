@@ -8,9 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	filler "githashcrash/filler/base"
-	matcher "githashcrash/matcher/startswith"
-	"githashcrash/worker"
+	"github.com/Mattias-/githashcrash/pkg/config"
+	filler "github.com/Mattias-/githashcrash/pkg/filler/base"
+	matcher "github.com/Mattias-/githashcrash/pkg/matcher/startswith"
+	"github.com/Mattias-/githashcrash/pkg/worker"
+	"github.com/Mattias-/githashcrash/pkg/worker/commitmsg"
 )
 
 func getStats(start time.Time, workers []worker.Worker) {
@@ -30,7 +32,7 @@ func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte
 	results := make(chan worker.Result)
 	var workers []worker.Worker
 	for i := 0; i < threads; i++ {
-		w := worker.NewW()
+		w := commitmsg.NewW()
 		workers = append(workers, w)
 		filler := filler.New(append(seed[:2], byte(i)))
 		go w.Work(matcher, filler, obj, placeholder, results)
@@ -51,10 +53,10 @@ func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte
 }
 
 func main() {
-	c := config{}
-	parseFlags(&c)
-	if c.cpuprofile != "" {
-		f, err := os.Create(c.cpuprofile)
+	c := config.Config{}
+	config.ParseFlags(&c)
+	if c.Cpuprofile != "" {
+		f, err := os.Create(c.Cpuprofile)
 		if err != nil {
 			log.Fatal("could not create CPU profile: ", err)
 		}
@@ -74,7 +76,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	result := run(c.fillerInput, c.object, c.seed, c.threads, c.placeholder)
+	result := run(c.FillerInput, c.Object, c.Seed, c.Threads, c.Placeholder)
 	log.Println("Found:", result.Sha1)
-	printRecreate(result)
+	commitmsg.PrintRecreate(result)
 }
