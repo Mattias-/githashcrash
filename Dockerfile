@@ -1,8 +1,9 @@
-FROM golang:1.13.0
+FROM golang:1.13.4
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o "githashcrash" "cmd/githashcrash/main.go"
 
-FROM scratch
+FROM alpine:latest
+RUN apk add git
 COPY --from=0 "/src/githashcrash" "/githashcrash"
-ENTRYPOINT ["/githashcrash"]
+CMD ["/githashcrash"]

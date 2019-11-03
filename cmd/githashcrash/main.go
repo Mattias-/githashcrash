@@ -1,12 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime/pprof"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Mattias-/githashcrash/pkg/config"
 	filler "github.com/Mattias-/githashcrash/pkg/filler/base"
@@ -15,41 +20,22 @@ import (
 	"github.com/Mattias-/githashcrash/pkg/worker/commitmsg"
 )
 
-func getStats(start time.Time, workers []worker.Worker) {
-	var sum uint64
-	for _, w := range workers {
-		sum += w.Count()
-	}
+var workers []worker.Worker
+
+func printStats(start time.Time) {
+	sum := hashCount()
 	elapsed := time.Since(start)
-	log.Println("Time:", elapsed)
+	log.Println("Time:", elapsed.String())
 	log.Println("Tested:", sum)
-	log.Println("HPS:", float64(sum)/elapsed.Seconds())
+	log.Println(fmt.Sprintf("%.2f", sum/elapsed.Seconds()/1000000), "MH/s")
 }
 
-func run(hashRe string, obj []byte, seed []byte, threads int, placeholder []byte) worker.Result {
-	matcher := matcher.New(hashRe)
-	log.Println("Workers:", threads)
-	results := make(chan worker.Result)
-	var workers []worker.Worker
-	for i := 0; i < threads; i++ {
-		w := commitmsg.NewW()
-		workers = append(workers, w)
-		filler := filler.New(append(seed[:2], byte(i)))
-		go w.Work(matcher, filler, obj, placeholder, results)
+func hashCount() float64 {
+	var sum float64
+	for _, w := range workers {
+		sum += float64(w.Count())
 	}
-
-	// Log stats during execution
-	start := time.Now()
-	ticker := time.NewTicker(time.Second * 2)
-	defer ticker.Stop()
-	go func() {
-		for range ticker.C {
-			getStats(start, workers)
-		}
-	}()
-	defer getStats(start, workers)
-
-	return <-results
+	return sum
 }
 
 func main() {
@@ -66,6 +52,19 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	if c.MetricsPort != "" {
+		prometheus.MustRegister(prometheus.NewBuildInfoCollector())
+		hashCounter := prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "hashcount_toal",
+			Help: "How many Hashes has been tested.",
+		}, hashCount)
+		prometheus.MustRegister(hashCounter)
+		go func() {
+			http.Handle("/metrics", promhttp.Handler())
+			log.Fatal(http.ListenAndServe(c.MetricsPort, nil))
+		}()
+	}
+
 	// listening OS shutdown singal
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
@@ -76,7 +75,31 @@ func main() {
 		os.Exit(1)
 	}()
 
-	result := run(c.FillerInput, c.Object, c.Seed, c.Threads, c.Placeholder)
+	log.Println("Workers:", c.Threads)
+
+	matcher := matcher.New(c.MatcherInput)
+	results := make(chan worker.Result)
+	for i := 0; i < c.Threads; i++ {
+		w := commitmsg.NewW()
+		workers = append(workers, w)
+		filler := filler.New(append(c.Seed[:2], byte(i)))
+		go w.Work(matcher, filler, c.Object, c.Placeholder, results)
+	}
+
+	// Log stats during execution
+	start := time.Now()
+	ticker := time.NewTicker(time.Second * 2)
+	go func() {
+		for range ticker.C {
+			printStats(start)
+		}
+	}()
+
+	result := <-results
+
+	ticker.Stop()
+	printStats(start)
+
 	log.Println("Found:", result.Sha1)
 	commitmsg.PrintRecreate(result)
 }
