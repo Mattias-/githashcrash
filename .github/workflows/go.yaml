@@ -1,0 +1,41 @@
+name: go
+
+on:
+  push:
+    branches:
+    - 'master'
+    tags:
+    - 'v*'
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+
+#    - name: Release
+#      uses: goreleaser/goreleaser-action@v3
+#      if: success() && startsWith(github.ref, 'refs/tags/v')
+#      with:
+#        version: latest
+#        args: release --rm-dist
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

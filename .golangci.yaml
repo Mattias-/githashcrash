@@ -1,0 +1,19 @@
+run:
+  go: '1.19'
+
+linters:
+  enable:
+    - gofmt
+    - gosec
+    - misspell
+
+linters-settings:
+  gosec:
+    excludes:
+      - G401
+      - G404
+      - G505
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
