@@ -3,7 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -40,9 +40,9 @@ func ParseFlags(c *Config) {
 	if len(args) == 2 {
 		var err error
 		if args[1] == "-" {
-			c.Object, err = ioutil.ReadAll(os.Stdin)
+			c.Object, err = io.ReadAll(os.Stdin)
 		} else {
-			c.Object, err = ioutil.ReadFile(args[1])
+			c.Object, err = os.ReadFile(args[1])
 		}
 		if err != nil {
 			log.Fatal(err)
