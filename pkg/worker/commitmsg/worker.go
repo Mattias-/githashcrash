@@ -16,8 +16,7 @@ import (
 func split2(h, needle []byte) ([]byte, []byte) {
 	// Split on placeholder
 	z := bytes.SplitN(h, needle, 2)
-	var before []byte
-	before = z[0]
+	before := z[0]
 	var after []byte
 	if len(z) == 2 {
 		after = z[1]
@@ -80,8 +79,9 @@ func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placehold
 			newObject := append(newObjectStart, *outputBuffer...)
 			newObject = append(newObject, newObjectEnd...)
 			result <- worker.Result{
-				hex.EncodeToString(hsum),
-				newObject}
+				Sha1:   hex.EncodeToString(hsum),
+				Object: newObject,
+			}
 			return
 		}
 	}

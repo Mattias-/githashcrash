@@ -61,7 +61,7 @@ func main() {
 		prometheus.MustRegister(hashCounter)
 		go func() {
 			http.Handle("/metrics", promhttp.Handler())
-			log.Fatal(http.ListenAndServe(c.MetricsPort, nil))
+			log.Fatal(http.ListenAndServe(c.MetricsPort, nil)) // #nosec G114
 		}()
 	}
 
