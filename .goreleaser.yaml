@@ -1,0 +1,13 @@
+builds:
+- id: githashcrash
+  main: ./cmd/githashcrash
+  env:
+    - CGO_ENABLED=0
+
+brews:
+- name: githashcrash
+  tap:
+    owner: zegl
+    name: homebrew-tap
+  homepage: "https://github.com/zegl/githashcrash/"
+  folder: Formula
