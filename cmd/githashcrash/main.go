@@ -15,7 +15,7 @@ import (
 
 	"github.com/Mattias-/githashcrash/pkg/config"
 	filler "github.com/Mattias-/githashcrash/pkg/filler/base"
-	matcher "github.com/Mattias-/githashcrash/pkg/matcher/startswith"
+	matcher "github.com/Mattias-/githashcrash/pkg/matcher/regexp"
 	"github.com/Mattias-/githashcrash/pkg/worker"
 	"github.com/Mattias-/githashcrash/pkg/worker/commitmsg"
 )
@@ -24,7 +24,7 @@ var workers []worker.Worker
 
 func printStats(start time.Time) {
 	sum := hashCount()
-	elapsed := time.Since(start)
+	elapsed := time.Since(start).Round(time.Second)
 	log.Println("Time:", elapsed.String())
 	log.Println("Tested:", sum)
 	log.Println(fmt.Sprintf("%.2f", sum/elapsed.Seconds()/1000000), "MH/s")
@@ -55,7 +55,7 @@ func main() {
 	if c.MetricsPort != "" {
 		prometheus.MustRegister(prometheus.NewBuildInfoCollector())
 		hashCounter := prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Name: "hashcount_toal",
+			Name: "hashcount_total",
 			Help: "How many Hashes has been tested.",
 		}, hashCount)
 		prometheus.MustRegister(hashCounter)
@@ -80,10 +80,13 @@ func main() {
 	matcher := matcher.New(c.MatcherInput)
 	results := make(chan worker.Result)
 	for i := 0; i < c.Threads; i++ {
-		w := commitmsg.NewW()
-		workers = append(workers, w)
 		filler := filler.New(append(c.Seed[:2], byte(i)))
-		go w.Work(matcher, filler, c.Object, c.Placeholder, results)
+		w := commitmsg.NewWorker(matcher, filler, c.Object, c.Placeholder)
+		workers = append(workers, w)
+	}
+
+	for _, w := range workers {
+		go w.Work(results)
 	}
 
 	// Log stats during execution
@@ -100,6 +103,6 @@ func main() {
 	ticker.Stop()
 	printStats(start)
 
-	log.Println("Found:", result.Sha1)
-	commitmsg.PrintRecreate(result)
+	log.Println("Found:", result.Sha1())
+	result.PrintRecreate()
 }

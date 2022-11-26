@@ -3,6 +3,8 @@ package regexpmatcher
 import (
 	"encoding/hex"
 	"regexp"
+
+	"github.com/Mattias-/githashcrash/pkg/matcher"
 )
 
 type regexpmatcher struct {
@@ -11,8 +13,8 @@ type regexpmatcher struct {
 }
 
 // New constructs a new regexpmatcher
-func New(regexString string) *regexpmatcher {
-	var targetHash = regexp.MustCompile(regexString)
+func New(exp string) matcher.Matcher {
+	var targetHash = regexp.MustCompile(exp)
 	// Hex encoded SHA1 is 40 bytes
 	encodedBuffer := make([]byte, 40)
 	return &regexpmatcher{

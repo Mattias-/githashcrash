@@ -8,14 +8,45 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Mattias-/githashcrash/pkg/filler"
-	"github.com/Mattias-/githashcrash/pkg/matcher"
 	"github.com/Mattias-/githashcrash/pkg/worker"
 )
 
-func split2(h, needle []byte) ([]byte, []byte) {
+type Matcher interface {
+	Match([]byte) bool
+}
+
+type Filler interface {
+	Fill(uint64)
+	OutputBuffer() *[]byte
+}
+
+type Worker struct {
+	count       uint64
+	matcher     Matcher
+	filler      Filler
+	object      []byte
+	placeholder []byte
+}
+
+func (w *Worker) Count() uint64 {
+	return w.count
+}
+
+func NewWorker(matcher Matcher, filler Filler, obj, placeholder []byte) *Worker {
+	return &Worker{
+		count:       0,
+		matcher:     matcher,
+		filler:      filler,
+		object:      obj,
+		placeholder: placeholder,
+	}
+}
+
+func (w *Worker) Work(rc chan worker.Result) {
+	outputBuffer := w.filler.OutputBuffer()
+
 	// Split on placeholder
-	z := bytes.SplitN(h, needle, 2)
+	z := bytes.SplitN(w.object, w.placeholder, 2)
 	before := z[0]
 	var after []byte
 	if len(z) == 2 {
@@ -24,31 +55,16 @@ func split2(h, needle []byte) ([]byte, []byte) {
 		// If no placeholder is found place it last.
 		after = []byte("\n")
 	}
-	return before, after
-}
 
-type worker2 struct {
-	i uint64
-}
-
-func (w *worker2) Count() uint64 {
-	return w.i
-}
-
-func NewW() worker.Worker {
-	return &worker2{0}
-}
-
-func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placeholder []byte, result chan worker.Result) {
-	outputBuffer := f.OutputBuffer()
-
-	// Split on placeholder
-	before, after := split2(obj, placeholder)
-
+	// The new object: Before placeholder, placeholder, After placeholder
 	newObjLen := len(before) + len(*outputBuffer) + len(after)
-	newObjectStart := append([]byte(fmt.Sprintf("commit %d\x00", newObjLen)), before...)
+
+	b := bytes.NewBufferString(fmt.Sprintf("commit %d\x00", newObjLen))
+	b.Write(before)
+	newObjectStart := b.Bytes()
 	newObjectEnd := after
 
+	// Freeze the hash of the object bytes before the placeholder
 	first := sha1.New()
 	first.Write(newObjectStart)
 	marshaler, ok := first.(encoding.BinaryMarshaler)
@@ -60,27 +76,24 @@ func (w *worker2) Work(m matcher.Matcher, f filler.Filler, obj []byte, placehold
 		log.Fatal("unable to marshal hash:", err)
 	}
 
-	for ; ; w.i++ {
-		f.Fill(w.i)
+	for {
+		w.count++
+		w.filler.Fill(w.count)
 
 		second := sha1.New()
-		unmarshaler, ok := second.(encoding.BinaryUnmarshaler)
-		if !ok {
-			log.Fatal("second does not implement encoding.BinaryUnmarshaler")
-		}
-		if err := unmarshaler.UnmarshalBinary(state); err != nil {
-			log.Fatal("unable to unmarshal hash:", err)
-		}
+		unmarshaler := second.(encoding.BinaryUnmarshaler)
+		unmarshaler.UnmarshalBinary(state)
 		second.Write(*outputBuffer)
 		second.Write(newObjectEnd)
 		hsum := second.Sum(nil)
 
-		if m.Match(hsum) {
-			newObject := append(newObjectStart, *outputBuffer...)
-			newObject = append(newObject, newObjectEnd...)
-			result <- worker.Result{
-				Sha1:   hex.EncodeToString(hsum),
-				Object: newObject,
+		if w.matcher.Match(hsum) {
+			b := bytes.NewBuffer(newObjectStart)
+			b.Write(*outputBuffer)
+			b.Write(newObjectEnd)
+			rc <- result{
+				sha1:   hex.EncodeToString(hsum),
+				object: b.Bytes(),
 			}
 			return
 		}
