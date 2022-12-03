@@ -3,6 +3,7 @@ package prefixmatcher
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/Mattias-/githashcrash/pkg/matcher"
 )
@@ -21,6 +22,10 @@ func New(start string) matcher.Matcher {
 	return &prefixmatcher{
 		prefix: dst,
 	}
+}
+
+func (m prefixmatcher) String() string {
+	return fmt.Sprintf("prefix(%s)", m.prefix)
 }
 
 func (m *prefixmatcher) Match(hsum []byte) bool {

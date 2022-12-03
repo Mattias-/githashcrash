@@ -9,18 +9,21 @@ import (
 type base struct {
 	seed         []byte
 	seedLen      int
-	encoding     base64.Encoding
 	inputBuffer  []byte
 	outputBuffer []byte
 }
 
+var b64encoder = base64.RawStdEncoding
+
 func New(seed []byte) *base {
-	b64 := base64.RawStdEncoding
-	// seedLen = 3 (as specified in advance)
-	seedLen := len(seed)
+	seedLen := 3
+	if len(seed) > seedLen {
+		seed = seed[:2]
+	}
+
 	rawCollisionLen := 9
 	// collisionLen = 12
-	collisionLen := b64.EncodedLen(rawCollisionLen)
+	collisionLen := b64encoder.EncodedLen(rawCollisionLen)
 
 	inputBuffer := make([]byte, rawCollisionLen)
 	outputBuffer := make([]byte, collisionLen)
@@ -30,7 +33,6 @@ func New(seed []byte) *base {
 	return &base{
 		seed,
 		seedLen,
-		*b64,
 		inputBuffer,
 		outputBuffer,
 	}
@@ -40,9 +42,10 @@ func (b base) OutputBuffer() *[]byte {
 	return &b.outputBuffer
 }
 
-func (b base) Fill(count uint64) {
-	binary.PutUvarint(b.inputBuffer[b.seedLen:], count)
+// Fill output buffer with new value
+func (b base) Fill(value uint64) {
+	binary.PutUvarint(b.inputBuffer[b.seedLen:], value)
 	// base64 encoding reduce byte size
 	// from i to o
-	b.encoding.Encode(b.outputBuffer, b.inputBuffer)
+	b64encoder.Encode(b.outputBuffer, b.inputBuffer)
 }

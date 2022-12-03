@@ -10,9 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/Mattias-/githashcrash/pkg/config"
 	filler "github.com/Mattias-/githashcrash/pkg/filler/base"
 	matcher "github.com/Mattias-/githashcrash/pkg/matcher/regexp"
@@ -53,14 +50,14 @@ func main() {
 	}
 
 	if c.MetricsPort != "" {
-		prometheus.MustRegister(prometheus.NewBuildInfoCollector())
-		hashCounter := prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Name: "hashcount_total",
-			Help: "How many Hashes has been tested.",
-		}, hashCount)
-		prometheus.MustRegister(hashCounter)
 		go func() {
-			http.Handle("/metrics", promhttp.Handler())
+			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
+				//w.WriteHeader(http.StatusOK)
+				fmt.Fprintln(w, `# HELP hashcount_total How many Hashes has been tested.
+# TYPE hashcount_total counter`)
+
+				fmt.Fprintln(w, "hashcount_total", hashCount())
+			})
 			log.Fatal(http.ListenAndServe(c.MetricsPort, nil)) // #nosec G114
 		}()
 	}
@@ -77,10 +74,10 @@ func main() {
 
 	log.Println("Workers:", c.Threads)
 
-	matcher := matcher.New(c.MatcherInput)
 	results := make(chan worker.Result)
 	for i := 0; i < c.Threads; i++ {
 		filler := filler.New(append(c.Seed[:2], byte(i)))
+		matcher := matcher.New(c.MatcherInput)
 		w := commitmsg.NewWorker(matcher, filler, c.Object, c.Placeholder)
 		workers = append(workers, w)
 	}

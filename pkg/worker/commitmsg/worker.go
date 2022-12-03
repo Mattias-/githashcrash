@@ -91,6 +91,7 @@ func (w *Worker) Work(rc chan worker.Result) {
 			b := bytes.NewBuffer(newObjectStart)
 			b.Write(*outputBuffer)
 			b.Write(newObjectEnd)
+
 			rc <- result{
 				sha1:   hex.EncodeToString(hsum),
 				object: b.Bytes(),
