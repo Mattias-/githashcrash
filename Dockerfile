@@ -1,4 +1,4 @@
-FROM golang:1.19.3
+FROM golang:1.19.4
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o "githashcrash" "cmd/githashcrash/main.go"
