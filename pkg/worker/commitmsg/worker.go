@@ -82,6 +82,7 @@ func (w *Worker) Work(rc chan worker.Result) {
 
 		second := sha1.New()
 		unmarshaler := second.(encoding.BinaryUnmarshaler)
+		// nolint:errcheck
 		unmarshaler.UnmarshalBinary(state)
 		second.Write(*outputBuffer)
 		second.Write(newObjectEnd)
