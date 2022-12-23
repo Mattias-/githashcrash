@@ -24,6 +24,7 @@ Hello world: REPLACEME abc
 The end
 `)
 	placeholder := []byte("REPLACEME")
+	expected := "00001bfa085cd462d9d3029ccf3dc95fd6d0674a"
 	filler := filler.New([]byte("000"))
 	w := NewWorker(matcher, filler, obj, placeholder)
 	results := make(chan worker.Result)
@@ -32,6 +33,9 @@ The end
 
 	if !strings.HasPrefix(r.Sha1(), "0000") {
 		t.Fail()
+	}
+	if r.Sha1() != expected {
+		t.Errorf("Sha1 %s is not %s", r.Sha1(), "0000")
 	}
 	if bytes.Equal(obj, r.Object()) {
 		t.Fail()

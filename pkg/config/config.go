@@ -22,7 +22,8 @@ type Config struct {
 	MetricsPort  string
 }
 
-func ParseFlags(c *Config) {
+func GetConfig() *Config {
+	c := &Config{}
 	flag.StringVar(&c.Cpuprofile, "cpuprofile", "", "write cpu profile to `file`")
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -54,4 +55,5 @@ func ParseFlags(c *Config) {
 		}
 		c.Object = obj
 	}
+	return c
 }

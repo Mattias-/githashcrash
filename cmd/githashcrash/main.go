@@ -24,7 +24,7 @@ func printStats(start time.Time) {
 	elapsed := time.Since(start).Round(time.Second)
 	log.Println("Time:", elapsed.String())
 	log.Println("Tested:", sum)
-	log.Println(fmt.Sprintf("%.2f", sum/elapsed.Seconds()/1000000), "MH/s")
+	log.Printf("%.2f MH/s\n", sum/1_000_000/elapsed.Seconds())
 }
 
 func hashCount() float64 {
@@ -36,8 +36,7 @@ func hashCount() float64 {
 }
 
 func main() {
-	c := config.Config{}
-	config.ParseFlags(&c)
+	c := config.GetConfig()
 	if c.Cpuprofile != "" {
 		f, err := os.Create(c.Cpuprofile)
 		if err != nil {
@@ -52,11 +51,9 @@ func main() {
 	if c.MetricsPort != "" {
 		go func() {
 			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
-				//w.WriteHeader(http.StatusOK)
 				fmt.Fprintln(w, `# HELP hashcount_total How many Hashes has been tested.
-# TYPE hashcount_total counter`)
-
-				fmt.Fprintln(w, "hashcount_total", hashCount())
+# TYPE hashcount_total counter
+hashcount_total`, hashCount())
 			})
 			log.Fatal(http.ListenAndServe(c.MetricsPort, nil)) // #nosec G114
 		}()
@@ -67,7 +64,7 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-signalChan
-		log.Printf("Got shutdown signal.")
+		log.Println("Got shutdown signal.")
 		pprof.StopCPUProfile()
 		os.Exit(1)
 	}()
@@ -80,9 +77,6 @@ func main() {
 		matcher := matcher.New(c.MatcherInput)
 		w := commitmsg.NewWorker(matcher, filler, c.Object, c.Placeholder)
 		workers = append(workers, w)
-	}
-
-	for _, w := range workers {
 		go w.Work(results)
 	}
 
@@ -101,5 +95,5 @@ func main() {
 	printStats(start)
 
 	log.Println("Found:", result.Sha1())
-	result.PrintRecreate()
+	fmt.Println(result.ShellRecreateCmd())
 }

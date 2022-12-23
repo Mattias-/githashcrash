@@ -1,7 +1,7 @@
 package worker
 
 type Result interface {
-	PrintRecreate()
+	ShellRecreateCmd() string
 	Sha1() string
 	Object() []byte
 }

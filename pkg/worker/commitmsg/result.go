@@ -5,7 +5,6 @@ import (
 	"compress/zlib"
 	"encoding/base64"
 	"fmt"
-	"log"
 
 	"github.com/Mattias-/githashcrash/pkg/worker"
 )
@@ -26,7 +25,7 @@ func (r result) Object() []byte {
 	return r.object
 }
 
-func (r result) PrintRecreate() {
+func (r result) ShellRecreateCmd() string {
 	var b bytes.Buffer
 	w := zlib.NewWriter(&b)
 	_, err := w.Write(r.object)
@@ -36,6 +35,5 @@ func (r result) PrintRecreate() {
 	}
 
 	b64Content := base64.StdEncoding.EncodeToString(b.Bytes())
-	log.Println("Create with:")
-	fmt.Printf("mkdir -p .git/objects/%s; echo '%s' | base64 -d > .git/objects/%s/%s; git reset %s\n", r.sha1[:2], b64Content, r.sha1[:2], r.sha1[2:], r.sha1)
+	return fmt.Sprintf("mkdir -p .git/objects/%s; echo '%s' | base64 -d > .git/objects/%s/%s; git reset %s\n", r.sha1[:2], b64Content, r.sha1[:2], r.sha1[2:], r.sha1)
 }
